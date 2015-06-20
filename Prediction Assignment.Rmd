@@ -1,0 +1,119 @@
+
+---
+title: "Practical Machine Learning - Prediction Assignment"
+output:
+  html_document:
+    keep_md: yes
+  pdf_document: default
+---
+
+
+# Executive Summary
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity. The main objective is to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants to quantify quantify how well they do  a particular activity
+
+# Exploratory Analysis
+
+```{r}
+library(caret);library(rattle); library(rpart.plot);library(doParallel)
+setwd("C:\\Raphael\\estudos\\datasciencecoursera\\Machine Learning")
+# download.file('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv', 'pml-training.csv')
+# download.file('https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv','pml-testing.csv' )
+
+train_file = read.csv('pml-training.csv', na.strings=c("NA","#DIV/0!", ""))
+test_file = read.csv('pml-testing.csv' , na.strings=c("NA", "#DIV/0!", ""))
+
+str(train_file)
+table(train_file$classe)
+
+```
+
+# Preparing data
+
+In order to clean data, I've decided to exclude all variables with NA's and other with no direct relationship to "classe".
+
+```{r}
+
+selected = which((colSums(!is.na(train_file)) >= nrow(train_file)))
+train_data = train_file[,selected]
+test_data = test_file[,selected]
+
+test_data = test_data[-ncol(test_data)]
+test_data$new_window = factor(test_data$new_window, levels=c("no","yes"))
+
+train_data = train_data[,-c(1,5)]
+test_data = test_data[,-c(1,5)]
+
+names(selected)
+
+```
+
+
+# Training data
+
+70% train, 30% test
+
+```{r}
+
+set.seed(10)
+inTrain = createDataPartition(train_data$classe, p = 0.7, list = FALSE)
+training = train_data[inTrain, ]
+testing = train_data[-inTrain, ]
+
+```
+
+# Random Forest
+
+```{r}
+
+class = training$classe
+data = training[-ncol(training)]
+
+registerDoParallel()
+modFit <- train(data, class, method="parRF", tuneGrid=data.frame(mtry=3), trControl=trainControl(method="none"))
+
+modFit
+modFit$finalModel
+
+
+test_predict <- predict(modFit, newdata=testing)
+confMatrix <- confusionMatrix(test_predict,testing$classe)
+confMatrix
+confMatrix$overall[1]
+
+```
+
+The model seems to predict quite well, once the Accuracy is about 99.7%.
+
+
+# Decision Tree
+
+```{r}
+
+modFit1 <- rpart(classe ~ ., data=training, method="class")
+fancyRpartPlot(modFit1)
+
+test_predict_dt <- predict(modFit1, testing, type = "class")
+confusionMatrix(test_predict_dt, testing$classe)
+
+confMatrix$overall[1]
+
+```
+
+
+# Save files to submit
+
+```{r}
+
+pml_write_files = function(x){
+        n = length(x)
+        for(i in 1:n){
+                filename = paste0("problem_id_",i,".txt")
+                write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+        }
+}
+
+answers <- predict(modFit, test_data)
+pml_write_files(answers)
+
+```
